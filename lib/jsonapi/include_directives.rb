@@ -1,23 +1,33 @@
 module JSONAPI
   class IncludeDirectives
     # Construct an IncludeDirectives Hash from an array of dot separated include strings.
-    # For example ['posts.comments.tags']
+    # For example ['things', 'things.user','things.things']
     # will transform into =>
     # {
-    #   posts:{
-    #     include:true,
-    #     include_related:{
-    #       comments:{
-    #         include:true,
-    #         include_related:{
-    #           tags:{
-    #             include:true
-    #           }
+    #     include_related: {
+    #         things: {
+    #             include: true,
+    #             include_related: {
+    #                 user: {
+    #                     include: true,
+    #                     include_related: {},
+    #                     include_in_join: true
+    #                 },
+    #                 things: {
+    #                     include: true,
+    #                     include_related: {},
+    #                     include_in_join: true,
+    #                     volatile: true
+    #                 }
+    #             },
+    #             include_in_join: true,
+    #             volatile: true
     #         }
-    #       }
     #     }
-    #   }
     # }
+    #
+    # Resources marked as volatile will be serialized multiple times and merged together, thus catching
+    # relationship data which may have been skipped depending on the order of serialization.
 
     def initialize(resource_klass, includes_array, force_eager_load: false)
       @resource_klass = resource_klass
@@ -25,6 +35,28 @@ module JSONAPI
       @include_directives_hash = { include_related: {} }
       includes_array.each do |include|
         parse_include(include)
+      end
+
+      # Volatile flags
+      @resource_counts = { resource_klass._type => 1}
+      count_resources(@include_directives_hash[:include_related])
+      set_volatile(@include_directives_hash[:include_related])
+    end
+
+    def count_resources(ir)
+      ir.each do |k, v|
+        @resource_counts[k] ||= 0
+        @resource_counts[k] += 1
+        count_resources(v[:include_related])
+      end
+    end
+
+    def set_volatile(ir)
+      ir.each do |k, v|
+        if @resource_counts[k] > 1
+          v[:volatile] = true
+        end
+        set_volatile(v[:include_related])
       end
     end
 
@@ -59,6 +91,10 @@ module JSONAPI
 
         current[:include_related][fragment] ||= { include: false, include_related: {}, include_in_join: include_in_join }
         current = current[:include_related][fragment]
+
+        # if @resource_klass_counts[fragment] > 1
+        #   current[:volatile] = true
+        # end
       end
       current
     end

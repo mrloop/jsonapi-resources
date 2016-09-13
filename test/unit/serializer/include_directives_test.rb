@@ -143,4 +143,56 @@ class IncludeDirectivesTest < ActiveSupport::TestCase
     directives = JSONAPI::IncludeDirectives.new(PersonResource, ['posts.comments.tags'])
     assert_array_equals([{:posts=>[{:comments=>[:tags]}]}], directives.model_includes)
   end
+
+  def test_circular_adds_volatile_flag
+    directives = JSONAPI::IncludeDirectives.new(Api::BoxResource, ['things', 'things.user','things.things']).include_directives
+
+    assert_hash_equals(
+        {
+            include_related: {
+                things: {
+                    include: true,
+                    include_related: {
+                        user: {
+                            include: true,
+                            include_related: {},
+                            include_in_join: true
+                        },
+                        things: {
+                            include: true,
+                            include_related: {},
+                            include_in_join: true,
+                            volatile: true
+                        }
+                    },
+                    include_in_join: true,
+                    volatile: true
+                }
+            }
+        },
+        directives)
+  end
+
+  def test_two_levels_include_primary_type
+    directives = JSONAPI::IncludeDirectives.new(PostResource, ['author.posts']).include_directives
+
+    assert_hash_equals(
+        {
+            include_related: {
+                author: {
+                    include: true,
+                    include_related:{
+                        posts: {
+                            include: true,
+                            include_related:{},
+                            include_in_join: true,
+                            volatile: true
+                        }
+                    },
+                    include_in_join: true
+                }
+            }
+        },
+        directives)
+  end
 end
