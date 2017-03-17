@@ -631,6 +631,8 @@ module JSONAPI
           nil
         end
       rescue NameError => ex
+        msg = "#{ex.message}. If this is used in always_load the resource and relationship to #{resource_klass.name} must be defined."
+        Rails.logger.warn msg
         nil
       end
 
